@@ -28,6 +28,9 @@ const DEFAULT_ITEMS = [
   ['Frisbee', ''],
   ['Ice cream machine', ''],
   ['Projector', ''],
+  ['Speaker', ''],
+  ['Volleyball', ''],
+  ['Board games', ''],
 ];
 
 const ITEM_HEADERS = ['Item', 'Description'];
