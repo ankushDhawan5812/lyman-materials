@@ -1,23 +1,34 @@
+/* Stanford identity palette: Cardinal, Palo Alto green, Sandstone, Fog, Stanford Black. */
 :root {
-  --bg: #f7f5f2;
+  --bg: #f9f7f3;
   --surface: #ffffff;
-  --surface-2: #f0ece6;
-  --text: #1c1917;
-  --muted: #6b645d;
-  --border: #e4ded6;
+  --surface-2: #f1ede4;
+  --hero-bg: #f4efe4;
+  --text: #2e2d29;
+  --muted: #53565a;
+  --border: #dad7cb;
   --accent: #8c1515;
   --btn-bg: #8c1515;
-  --btn-bg-hover: #6e1111;
+  --btn-bg-hover: #820000;
   --on-accent: #ffffff;
-  --ok: #17693c;
-  --ok-bg: #e3f2e8;
-  --out: #8a5300;
-  --out-bg: #fbefd9;
-  --late: #b3261e;
-  --late-bg: #fbe9e7;
+  --cardinal: #8c1515;
+  --oak: #175e54;
+  --oak-hi: #2f7a68;
+  --bark: #5d4b3c;
+  --sandstone: #d2c295;
+  --disc: #ffffff;
+  --ok: #175e54;
+  --ok-bg: #e2eeea;
+  --out: #6b5424;
+  --out-bg: #f3ead2;
+  --late: #b1040e;
+  --late-bg: #f9e5e4;
+  --footer-bg: #2e2d29;
+  --footer-text: #dad7cb;
+  --footer-link: #d2c295;
   --focus: rgba(140, 21, 21, 0.35);
-  --shadow: 0 1px 2px rgba(28, 25, 23, 0.04), 0 10px 24px -14px rgba(28, 25, 23, 0.18);
-  --radius: 14px;
+  --shadow: 0 1px 2px rgba(46, 45, 41, 0.05), 0 10px 24px -14px rgba(46, 45, 41, 0.2);
+  --radius: 12px;
   --sans: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   --serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   color-scheme: light;
@@ -25,23 +36,33 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #151312;
-    --surface: #1e1b19;
-    --surface-2: #2a2623;
-    --text: #f3efea;
-    --muted: #a9a19a;
-    --border: #35302c;
-    --accent: #ee7a72;
-    --btn-bg: #b3302a;
-    --btn-bg-hover: #c63d36;
+    --bg: #181715;
+    --surface: #22211e;
+    --surface-2: #2e2d29;
+    --hero-bg: #201f1c;
+    --text: #f4f1ea;
+    --muted: #b6b1a9;
+    --border: #3b3934;
+    --accent: #ec8a82;
+    --btn-bg: #b1040e;
+    --btn-bg-hover: #c8161f;
     --on-accent: #ffffff;
-    --ok: #72d39b;
-    --ok-bg: rgba(114, 211, 155, 0.12);
-    --out: #f0b85e;
-    --out-bg: rgba(240, 184, 94, 0.13);
+    --cardinal: #c8161f;
+    --oak: #4f8a70;
+    --oak-hi: #6fa287;
+    --bark: #a08a73;
+    --sandstone: #d2c295;
+    --disc: #2e2d29;
+    --ok: #86c9a6;
+    --ok-bg: rgba(111, 162, 135, 0.16);
+    --out: #dccb9a;
+    --out-bg: rgba(210, 194, 149, 0.14);
     --late: #ff8f85;
-    --late-bg: rgba(255, 143, 133, 0.13);
-    --focus: rgba(238, 122, 114, 0.45);
+    --late-bg: rgba(255, 143, 133, 0.14);
+    --footer-bg: #11100f;
+    --footer-text: #b6b1a9;
+    --footer-link: #d2c295;
+    --focus: rgba(236, 138, 130, 0.45);
     --shadow: none;
     color-scheme: dark;
   }
@@ -68,12 +89,34 @@ a { color: var(--accent); text-underline-offset: 2px; }
 }
 @media (min-width: 640px) { .wrap { padding: 0 32px; } }
 
-.topbar { height: 6px; background: var(--btn-bg); }
+/* ---- Stanford brand bar ---- */
 
-/* ---- Header ---- */
+.brandbar { background: #8c1515; color: #ffffff; }
+.brandbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.brand-stanford { font: 600 20px/1 var(--serif); letter-spacing: 0.01em; }
+.brand-divider { width: 1px; height: 20px; background: rgba(255, 255, 255, 0.55); }
+.brand-unit { font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
 
-.site-header { padding: 48px 16px 28px; }
-@media (min-width: 640px) { .site-header { padding: 64px 32px 36px; } }
+/* ---- Hero ---- */
+
+.hero {
+  background: var(--hero-bg);
+  border-bottom: 4px solid var(--sandstone);
+  margin-bottom: 32px;
+}
+.hero-inner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 32px;
+  padding-top: 48px;
+  padding-bottom: 44px;
+}
 
 .eyebrow {
   margin: 0;
@@ -86,21 +129,38 @@ a { color: var(--accent); text-underline-offset: 2px; }
 
 h1 {
   margin: 8px 0 12px;
-  font: 600 clamp(36px, 7vw, 54px)/1.05 var(--serif);
+  font: 600 clamp(38px, 7vw, 58px)/1.05 var(--serif);
   letter-spacing: -0.015em;
 }
 
 .lede {
   margin: 0;
-  max-width: 48ch;
+  max-width: 50ch;
   font-size: 18px;
   color: var(--muted);
+}
+
+.emblem { width: 190px; height: 190px; display: block; }
+.e-disc { fill: var(--disc); }
+.e-ring { fill: none; stroke: var(--cardinal); stroke-width: 4; }
+.e-ring-dots { fill: none; stroke: var(--sandstone); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 0.1 7.2; }
+.e-ground { fill: var(--sandstone); opacity: 0.7; }
+.e-bark { fill: var(--bark); }
+.e-canopy { fill: var(--oak); }
+.e-canopy-hi { fill: var(--oak-hi); }
+
+@media (max-width: 640px) {
+  .brand-stanford { font-size: 18px; }
+  .brand-unit { font-size: 14px; }
+  .hero-inner { grid-template-columns: 1fr; gap: 16px; padding-top: 28px; padding-bottom: 28px; }
+  .emblem { order: -1; width: 76px; height: 76px; }
 }
 
 /* ---- Toolbar ---- */
 
 .banner {
   margin: 0 0 20px;
+  border-left: 4px solid var(--sandstone);
   padding: 12px 16px;
   border-radius: 12px;
   background: var(--out-bg);
@@ -236,6 +296,7 @@ h1 {
 /* ---- How it works ---- */
 
 .how { margin: 56px 0 0; padding-top: 32px; border-top: 1px solid var(--border); }
+.how h2::after { content: ''; display: block; width: 40px; height: 3px; margin-top: 10px; background: var(--cardinal); }
 .how h2 { margin: 0 0 16px; font: 600 22px/1.2 var(--serif); }
 .how ol {
   list-style: none;
@@ -270,11 +331,24 @@ h1 {
 }
 
 .site-footer {
-  padding-top: 40px;
-  padding-bottom: 48px;
-  color: var(--muted);
+  margin-top: 56px;
+  padding: 36px 0 32px;
+  background: var(--footer-bg);
+  color: var(--footer-text);
   font-size: 15px;
+  border-top: 4px solid var(--cardinal);
 }
+.site-footer a { color: var(--footer-link); }
+.site-footer p { margin: 0; }
+.footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px 40px;
+}
+.footer-inner > div { max-width: 52ch; display: grid; gap: 4px; }
+.footer-title { font: 600 20px/1.2 var(--serif); color: #ffffff; }
+.footer-note { margin-top: 24px !important; font-size: 13px; opacity: 0.75; }
 
 /* ---- Buttons ---- */
 

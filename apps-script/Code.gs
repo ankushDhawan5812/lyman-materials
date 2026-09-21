@@ -4,7 +4,7 @@
  * - Stores the item list and every checkout request in a Google Sheet.
  * - doGet  → returns items + active bookings to the website (no names/emails).
  * - doPost → records a new request and emails the community associate.
- * - sendReminders (daily trigger) → emails borrowers a week after pickup.
+ * - sendReminders (daily trigger) → emails borrowers the day after pickup, then a week after.
  *
  * To mark something returned, open the sheet and set the request's Status to "Returned".
  * See README.md for setup.
@@ -15,8 +15,9 @@ const CONFIG = {
   SITE_NAME: 'Lyman Materials',
   SITE_URL: 'https://ankushdhawan5812.github.io/lyman-materials/',
   TIMEZONE: 'America/Los_Angeles',
-  REMINDER_DAYS_AFTER_PICKUP: 7, // reminder email goes out this many days after the pickup date
-  REMINDER_HOUR: 9,              // local hour the daily reminder check runs
+  DAY_AFTER_NOTE_DAYS: 1,        // "hope it went well" note this many days after pickup (0 turns it off)
+  REMINDER_DAYS_AFTER_PICKUP: 7, // return reminder this many days after pickup (0 turns it off)
+  REMINDER_HOUR: 9,              // local hour the daily email check runs
   MAX_DAYS: 14,                  // longest loan someone can request
   MAX_DAYS_AHEAD: 90,            // how far in advance someone can reserve
   SEND_CONFIRMATION_TO_BORROWER: true,
@@ -32,7 +33,7 @@ const DEFAULT_ITEMS = [
 const ITEM_HEADERS = ['Item', 'Description'];
 const REQUEST_HEADERS = [
   'ID', 'Submitted', 'Item', 'Name', 'Email', 'Unit',
-  'Pickup date', 'Return by', 'Days', 'Notes', 'Status', 'Reminder sent',
+  'Pickup date', 'Return by', 'Days', 'Notes', 'Status', 'Day-after note sent', 'Reminder sent',
 ];
 const STATUS = { ACTIVE: 'Active', RETURNED: 'Returned', CANCELLED: 'Cancelled' };
 
@@ -66,6 +67,7 @@ function setup() {
       .setDataValidation(statusRule_());
     addStatusColors_(requests);
   }
+  requestTable_(); // adds any columns missing from a sheet made by an earlier version
 
   ScriptApp.getProjectTriggers()
     .filter(t => t.getHandlerFunction() === 'sendReminders')
@@ -91,7 +93,7 @@ function doGet() {
       name: item.name,
       description: item.description,
       bookings: requests
-        .filter(r => sameItem_(r.item, item.name) && r.start && r.end)
+        .filter(r => sameItem_(r.item, item.name) && isYmd_(r.start) && isYmd_(r.end))
         .map(r => ({ start: r.start, end: r.end }))
         .sort((a, b) => a.start.localeCompare(b.start)),
     }));
@@ -157,7 +159,7 @@ function createRequest_(data) {
 
   if (!name) throw new UserError('Please enter your name.');
   if (!isEmail_(email)) throw new UserError('Please enter a valid email address.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || addDays_(start, 0) !== start) {
+  if (!isYmd_(start) || addDays_(start, 0) !== start) {
     throw new UserError('Please choose a pickup date.');
   }
   if (start < today) throw new UserError('The pickup date can’t be in the past.');
@@ -175,7 +177,7 @@ function createRequest_(data) {
   const table = requestTable_();
   // An item that's overdue is still out today, so treat its booking as running until today.
   const clash = table.rows.find(r =>
-    isActive_(r) && sameItem_(r.item, item.name) && r.start && r.end &&
+    isActive_(r) && sameItem_(r.item, item.name) && isYmd_(r.start) && isYmd_(r.end) &&
     start <= maxYmd_(r.end, today) && end >= r.start);
   if (clash) {
     throw new UserError('Sorry — the ' + item.name + ' is already booked ' + fmt_(clash.start) +
@@ -195,7 +197,7 @@ function createRequest_(data) {
   const byHeader = {
     'ID': record.id, 'Submitted': record.submitted, 'Item': record.item, 'Name': name,
     'Email': email, 'Unit': unit, 'Pickup date': start, 'Return by': end, 'Days': String(days),
-    'Notes': notes, 'Status': STATUS.ACTIVE, 'Reminder sent': '',
+    'Notes': notes, 'Status': STATUS.ACTIVE,
   };
 
   const sheet = table.sheet;
@@ -210,24 +212,34 @@ function createRequest_(data) {
   return record;
 }
 
-/** Daily trigger: remind anyone who still has an item a week after pickup. */
+/**
+ * Daily trigger. Anyone who still has an item gets a "hope it went well" note the day after
+ * pickup, then a return reminder a week after pickup. If runs were missed, only the most
+ * recent note that's due goes out, so nobody gets a stale day-after note.
+ */
 function sendReminders() {
   const today = today_();
   const table = requestTable_();
-  const due = table.rows.filter(r =>
-    isActive_(r) && !r.reminderSent && r.start && isEmail_(r.email) &&
-    addDays_(r.start, CONFIG.REMINDER_DAYS_AFTER_PICKUP) <= today);
+  const stages = [
+    { days: CONFIG.DAY_AFTER_NOTE_DAYS, field: 'dayAfterSent', column: 'Day-after note sent', send: sendDayAfterNote_ },
+    { days: CONFIG.REMINDER_DAYS_AFTER_PICKUP, field: 'reminderSent', column: 'Reminder sent', send: remindBorrower_ },
+  ].filter(s => s.days > 0).sort((a, b) => a.days - b.days);
 
-  due.forEach(r => {
+  let count = 0;
+  table.rows.forEach(r => {
+    if (!isActive_(r) || !isYmd_(r.start) || !isYmd_(r.end) || !isEmail_(r.email)) return;
+    const stage = stages.filter(s => addDays_(r.start, s.days) <= today).pop();
+    if (!stage || r[stage.field]) return;
     try {
-      remindBorrower_(r, today);
-      table.sheet.getRange(r.row, table.col['Reminder sent'] + 1)
+      stage.send(r, today);
+      table.sheet.getRange(r.row, table.col[stage.column] + 1)
         .setValue(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm'));
+      count++;
     } catch (err) {
-      console.error('Reminder failed for ' + r.id + ': ' + err);
+      console.error('Email to ' + r.id + ' failed: ' + err);
     }
   });
-  Logger.log('Sent ' + due.length + ' reminder(s).');
+  Logger.log('Sent ' + count + ' email(s).');
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +254,7 @@ function notifyAdmin_(r) {
     subject: 'New request: ' + r.item + ' — ' + r.name + ' (' + fmt_(r.start) + ' to ' + fmt_(r.end) + ')',
     htmlBody: emailHtml_(
       'New checkout request',
-      '<p style="margin:0 0 4px">' + esc_(r.name) + ' wants to borrow the <b>' + esc_(r.item) + '</b>. ' +
+      '<p style="margin:0 0 12px">' + esc_(r.name) + ' wants to borrow the <b>' + esc_(r.item) + '</b>. ' +
         'Reply to this email to reach them directly.</p>',
       [
         ['Request', esc_(r.id)],
@@ -254,7 +266,7 @@ function notifyAdmin_(r) {
         ['Return by', esc_(fmt_(r.end)) + ' (' + r.days + (r.days === 1 ? ' day)' : ' days)')],
         ['Notes', esc_(r.notes).replace(/\n/g, '<br>')],
       ],
-      '<p>When it comes back, set the Status to <b>Returned</b> in the ' +
+      '<p style="margin:0">When it comes back, set the Status to <b>Returned</b> in the ' +
         '<a href="' + r.sheetLink + '" style="color:#8c1515">checkout log</a>. ' +
         'To turn the request down, set it to <b>Cancelled</b> so the dates free up.</p>'
     ),
@@ -269,24 +281,36 @@ function confirmToBorrower_(r) {
     subject: 'Request received: ' + r.item + ' (' + fmt_(r.start) + ')',
     htmlBody: emailHtml_(
       'We got your request',
-      '<p style="margin:0 0 4px">Hi ' + esc_(firstName_(r.name)) + ', your request for the <b>' +
+      '<p style="margin:0 0 12px">Hi ' + esc_(firstName_(r.name)) + ', your request for the <b>' +
         esc_(r.item) + '</b> is in. The Lyman community associate will follow up about pickup.</p>',
       [
         ['Request', esc_(r.id)],
         ['Pickup', esc_(fmt_(r.start))],
         ['Return by', esc_(fmt_(r.end))],
       ],
-      '<p>Questions or change of plans? Just reply to this email.</p>'
+      '<p style="margin:0">Questions or change of plans? Just reply to this email.</p>'
+    ),
+  });
+}
+
+function sendDayAfterNote_(r, today) {
+  MailApp.sendEmail({
+    to: r.email,
+    replyTo: CONFIG.ADMIN_EMAIL,
+    name: CONFIG.SITE_NAME,
+    subject: 'Hope it went well! Returning the ' + r.item,
+    htmlBody: emailHtml_(
+      'Hope it went well!',
+      '<p style="margin:0 0 12px">Hi ' + esc_(firstName_(r.name)) + ', thanks for borrowing the <b>' +
+        esc_(r.item) + '</b> from Lyman. We hope your event was a success!</p>' +
+        '<p style="margin:0 0 12px">Just a heads-up: it ' + dueText_(r, today) + '</p>',
+      [],
+      '<p style="margin:0">Reply to this email to set up a drop-off. If you&rsquo;ve already brought it back, thank you &mdash; you can ignore this note.</p>'
     ),
   });
 }
 
 function remindBorrower_(r, today) {
-  let when;
-  if (r.end < today) when = 'was due back on <b>' + esc_(fmt_(r.end)) + '</b>. Please return it as soon as you can.';
-  else if (r.end === today) when = 'is due back <b>today</b>. Please return it when you’re done.';
-  else when = 'is due back on <b>' + esc_(fmt_(r.end)) + '</b>. Please return it by then.';
-
   MailApp.sendEmail({
     to: r.email,
     replyTo: CONFIG.ADMIN_EMAIL,
@@ -294,27 +318,44 @@ function remindBorrower_(r, today) {
     subject: 'Reminder: please return the ' + r.item,
     htmlBody: emailHtml_(
       'Friendly reminder',
-      '<p style="margin:0 0 4px">Hi ' + esc_(firstName_(r.name)) + ', the <b>' + esc_(r.item) +
-        '</b> you picked up on ' + esc_(fmt_(r.start)) + ' ' + when + '</p>',
+      '<p style="margin:0 0 12px">Hi ' + esc_(firstName_(r.name)) + ', the <b>' + esc_(r.item) +
+        '</b> you picked up on ' + esc_(fmt_(r.start)) + ' ' + dueText_(r, today) + '</p>',
       [],
-      '<p>Reply to this email to set up a drop-off. If you’ve already returned it, thank you — you can ignore this note.</p>'
+      '<p style="margin:0">Reply to this email to set up a drop-off. If you&rsquo;ve already returned it, thank you &mdash; you can ignore this note.</p>'
     ),
   });
 }
 
+function dueText_(r, today) {
+  if (r.end < today) return 'was due back on <b>' + esc_(fmt_(r.end)) + '</b>. Please return it as soon as you can.';
+  if (r.end === today) return 'is due back <b>today</b>. Please return it when you&rsquo;re done.';
+  return 'is due back on <b>' + esc_(fmt_(r.end)) + '</b>. Please return it by then.';
+}
+
+/** Stanford/Lyman-branded email shell: Cardinal header band, white card, sandstone footer. */
 function emailHtml_(title, intro, rows, outro) {
   const cells = rows.filter(row => row[1]).map(row =>
-    '<tr><td style="padding:6px 20px 6px 0;color:#6b645d;vertical-align:top;white-space:nowrap">' + esc_(row[0]) +
+    '<tr><td style="padding:6px 20px 6px 0;color:#53565a;vertical-align:top;white-space:nowrap">' + esc_(row[0]) +
     '</td><td style="padding:6px 0">' + row[1] + '</td></tr>').join('');
   const site = CONFIG.SITE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
-  return '<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;' +
-    'font-size:15px;line-height:1.55;color:#1c1917;max-width:560px">' +
-    '<h2 style="font-size:20px;margin:0 0 12px;color:#8c1515">' + esc_(title) + '</h2>' +
+  const serif = 'font-family:Georgia,serif;';
+  return '<div style="background:#f4f4f4;padding:24px 12px">' +
+    '<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:10px;overflow:hidden;' +
+    'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;' +
+    'font-size:15px;line-height:1.55;color:#2e2d29">' +
+    '<div style="background:#8c1515;color:#ffffff;padding:16px 24px">' +
+    '<div style="' + serif + 'font-size:20px;font-weight:bold">' + esc_(CONFIG.SITE_NAME) + '</div>' +
+    '<div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:0.85">' +
+    'Stanford &middot; Lyman Graduate Residences</div></div>' +
+    '<div style="padding:24px 24px 20px">' +
+    '<h2 style="' + serif + 'font-size:22px;font-weight:normal;margin:0 0 12px;color:#2e2d29">' + esc_(title) + '</h2>' +
     intro +
-    (cells ? '<table style="border-collapse:collapse;margin:12px 0 4px">' + cells + '</table>' : '') +
+    (cells ? '<table style="border-collapse:collapse;margin:4px 0 12px">' + cells + '</table>' : '') +
     (outro || '') +
-    '<p style="color:#6b645d;font-size:13px;margin-top:24px">' + esc_(CONFIG.SITE_NAME) + ' · ' +
-    '<a href="' + CONFIG.SITE_URL + '" style="color:#8c1515">' + esc_(site) + '</a></p></div>';
+    '</div>' +
+    '<div style="background:#f9f6ef;border-top:3px solid #d2c295;padding:12px 24px;font-size:13px;color:#53565a">' +
+    'Richard W. Lyman Graduate Residences &middot; <a href="' + CONFIG.SITE_URL + '" style="color:#8c1515">' +
+    esc_(site) + '</a></div></div></div>';
 }
 
 // ---------------------------------------------------------------------------
@@ -344,9 +385,18 @@ function requestTable_() {
   const sheet = getSpreadsheet_().getSheetByName('Requests');
   const values = sheet.getDataRange().getValues();
   const headers = values.shift().map(h => String(h).trim());
+  const missing = REQUEST_HEADERS.filter(h => headers.indexOf(h) === -1);
+  if (missing.length) {
+    sheet.getRange(1, headers.length + 1, 1, missing.length).setValues([missing])
+      .setFontWeight('bold').setBackground('#8c1515').setFontColor('#ffffff');
+    headers.push(...missing);
+  }
   const col = {};
   headers.forEach((h, i) => { col[h] = i; });
-  const cell = (row, h) => (col[h] == null ? '' : row[col[h]]);
+  const cell = (row, h) => {
+    const v = col[h] == null ? '' : row[col[h]];
+    return v == null ? '' : v;
+  };
 
   const rows = values.map((row, i) => ({
     row: i + 2,
@@ -357,6 +407,7 @@ function requestTable_() {
     start: toYmd_(cell(row, 'Pickup date')),
     end: toYmd_(cell(row, 'Return by')),
     status: String(cell(row, 'Status')).trim(),
+    dayAfterSent: String(cell(row, 'Day-after note sent')).trim(),
     reminderSent: String(cell(row, 'Reminder sent')).trim(),
   })).filter(r => r.item);
 
@@ -409,6 +460,10 @@ function addDays_(ymd, n) {
 function toYmd_(v) {
   if (v instanceof Date) return Utilities.formatDate(v, CONFIG.TIMEZONE, 'yyyy-MM-dd');
   return String(v == null ? '' : v).trim();
+}
+
+function isYmd_(s) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
 
 function maxYmd_(a, b) {

@@ -1,13 +1,16 @@
 # Lyman Materials
 
-A checkout board for shared Lyman gear (coolers, frisbees, the ice cream machine, the projector, …).
+A checkout board for shared gear at the Richard W. Lyman Graduate Residences, Stanford (coolers, frisbees, the ice cream machine, the projector, …). Styled with Stanford's colors and typefaces. The emblem is the 60-foot oak at the center of the Lyman commons.
 
 **Live site:** https://ankushdhawan5812.github.io/lyman-materials/
 
 - Residents see what's available now, what's checked out (and when it's due back), and upcoming reservations. Names and emails are never shown publicly.
 - They request an item with a pickup date and a loan length. Overlapping dates are blocked.
 - Each request lands in a Google Sheet and emails **ankushd@stanford.edu** (reply goes straight to the borrower). The borrower gets a confirmation.
-- Every morning a reminder email goes to anyone who still has an item **7 days after pickup**.
+- Borrowers who still have an item get two automatic emails, both at 9am:
+  - **The day after pickup:** "Hope your event went well!" plus the return date.
+  - **7 days after pickup:** a return reminder.
+  If a daily run is ever missed, only the most recent one that's due is sent, so nobody gets a stale "hope it went well" note.
 - When something comes back, set its **Status** to `Returned` in the sheet. That frees the item on the site and stops reminders.
 
 ## How it fits together
@@ -17,7 +20,7 @@ GitHub Pages (index.html, app.js)  ──GET items / POST request──▶  Goog
                                                                         │
                                                                         ├─ Google Sheet: "Items" + "Requests" tabs
                                                                         ├─ MailApp: request + confirmation emails
-                                                                        └─ Daily 9am trigger: return reminders
+                                                                        └─ Daily 9am trigger: day-after note + 1-week reminder
 ```
 
 GitHub Pages can only serve static files, so the Apps Script handles storage and email. It's free and runs under your Google account.
@@ -53,9 +56,12 @@ Loan limits, reminder timing, and email text live in the `CONFIG` block at the t
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `ADMIN_EMAIL` | `ankushd@stanford.edu` | Where new requests are sent |
-| `REMINDER_DAYS_AFTER_PICKUP` | `7` | When the return reminder goes out |
+| `DAY_AFTER_NOTE_DAYS` | `1` | When the "hope it went well" note goes out (`0` turns it off) |
+| `REMINDER_DAYS_AFTER_PICKUP` | `7` | When the return reminder goes out (`0` turns it off) |
 | `MAX_DAYS` | `14` | Longest loan someone can request |
 | `MAX_DAYS_AHEAD` | `90` | How far ahead someone can reserve |
 | `SEND_CONFIRMATION_TO_BORROWER` | `true` | Email the borrower when they submit |
+
+If you set this up with an earlier version, paste in the new `Code.gs` and redeploy (below). The new **Day-after note sent** column is added to your sheet automatically.
 
 After editing the code in the Apps Script editor, use **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**. That keeps the same URL, so `config.js` doesn't change. If you change `REMINDER_HOUR`, run `setup` again to reschedule the trigger.
