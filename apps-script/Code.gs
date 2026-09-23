@@ -26,11 +26,23 @@ const CONFIG = {
 const DEFAULT_ITEMS = [
   ['Cooler', ''],
   ['Frisbee', ''],
-  ['Ice cream machine', ''],
+  ['Ice cream maker', ''],
   ['Projector', ''],
   ['Speaker', ''],
-  ['Volleyball', ''],
   ['Board games', ''],
+  ['Snow cone maker', ''],
+  ['Chocolate fountain', ''],
+  ['Waffle cone maker', ''],
+  ['Kitchen materials', ''],
+  ['Office supplies', ''],
+  ['Pickleball set', ''],
+  ['Water guns', ''],
+  ['Volleyball', ''],
+  ['Soccer ball', ''],
+  ['Baseball bat', ''],
+  ['Tennis balls', ''],
+  ['Tennis racquets', ''],
+  ['Golf clubs', ''],
 ];
 
 const ITEM_HEADERS = ['Item', 'Description'];
